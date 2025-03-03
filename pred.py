@@ -8,12 +8,20 @@ from openai import OpenAI
 from transformers import AutoTokenizer
 import tiktoken
 import torch.multiprocessing as mp
+from multiprocessing import Queue
 
 model_map = json.loads(open('config/model2path.json', encoding='utf-8').read())
 maxlen_map = json.loads(open('config/model2maxlen.json', encoding='utf-8').read())
 
 URL = "http://localhost:11434/v1/"
 API_KEY = "ollama"
+
+# Map model names to format used by inference LLM (Ollama here)
+ollama_model_map = {
+    "Qwen2.5-7B-Instruct": "qwen2.5:7b-instruct",
+    # Add other model mappings as needed
+}
+
 template_rag = open('prompts/0shot_rag.txt', encoding='utf-8').read()
 template_no_context = open('prompts/0shot_no_context.txt', encoding='utf-8').read()
 template_0shot = open('prompts/0shot.txt', encoding='utf-8').read()
@@ -34,8 +42,13 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
             input_ids = input_ids[:max_len//2] + input_ids[-max_len//2:]
             prompt = tokenizer.decode(input_ids)
     tries = 0
-    if model in model_map:
+    
+    # Map model name to Ollama format if it exists
+    if model in ollama_model_map:
+        model = ollama_model_map[model]
+    elif model in model_map:
         model = model_map[model]
+        
     while tries < 5:
         tries += 1
         try:
@@ -67,7 +80,7 @@ def extract_answer(response):
         else:
             return None
 
-def get_pred(data, args, fout):
+def get_pred(data, args, result_queue):
     model = args.model
     if "gpt" in model or "o1" in model:
         tokenizer = tiktoken.encoding_for_model("gpt-4o-2024-08-06")
@@ -109,8 +122,7 @@ def get_pred(data, args, fout):
         item['pred'] = extract_answer(response)
         item['judge'] = item['pred'] == item['answer']
         item['context'] = context[:1000]
-        fout.write(json.dumps(item, ensure_ascii=False) + '\n')
-        fout.flush()
+        result_queue.put(item)
 
 def main():
     os.makedirs(args.save_dir, exist_ok=True)
@@ -124,7 +136,7 @@ def main():
     else:
         out_file = os.path.join(args.save_dir, args.model.split("/")[-1] + ".jsonl")
 
-    dataset = load_dataset('THUDM/LongBench-v2', split='train') # dataset = json.load(open('data.json', 'r', encoding='utf-8'))
+    dataset = load_dataset('THUDM/LongBench-v2', split='train')
     data_all = [{"_id": item["_id"], "domain": item["domain"], "sub_domain": item["sub_domain"], "difficulty": item["difficulty"], "length": item["length"], "question": item["question"], "choice_A": item["choice_A"], "choice_B": item["choice_B"], "choice_C": item["choice_C"], "choice_D": item["choice_D"], "answer": item["answer"], "context": item["context"]} for item in dataset]
 
     # cache
@@ -132,18 +144,34 @@ def main():
     if os.path.exists(out_file):
         with open(out_file, encoding='utf-8') as f:
             has_data = {json.loads(line)["_id"]: 0 for line in f}
-    fout = open(out_file, 'a', encoding='utf-8')
+    
     data = []
     for item in data_all:
         if item["_id"] not in has_data:
             data.append(item)
 
+    # Create a queue for results
+    result_queue = Queue()
+    
+    # Start processes
     data_subsets = [data[i::args.n_proc] for i in range(args.n_proc)]
     processes = []
     for rank in range(args.n_proc):
-        p = mp.Process(target=get_pred, args=(data_subsets[rank], args, fout))
+        p = mp.Process(target=get_pred, args=(data_subsets[rank], args, result_queue))
         p.start()
         processes.append(p)
+
+    # Write results to file
+    with open(out_file, 'a', encoding='utf-8') as fout:
+        while any(p.is_alive() for p in processes):
+            try:
+                item = result_queue.get(timeout=1)
+                fout.write(json.dumps(item, ensure_ascii=False) + '\n')
+                fout.flush()
+            except:
+                continue
+
+    # Wait for all processes to complete
     for p in processes:
         p.join()
 
@@ -151,9 +179,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--save_dir", "-s", type=str, default="results")
     parser.add_argument("--model", "-m", type=str, default="GLM-4-9B-Chat")
-    parser.add_argument("--cot", "-cot", action='store_true') # set to True if using COT
-    parser.add_argument("--no_context", "-nc", action='store_true') # set to True if using no context (directly measuring memorization)
-    parser.add_argument("--rag", "-rag", type=int, default=0) # set to 0 if RAG is not used, otherwise set to N when using top-N retrieved context
+    parser.add_argument("--cot", "-cot", action='store_true')
+    parser.add_argument("--no_context", "-nc", action='store_true')
+    parser.add_argument("--rag", "-rag", type=int, default=0)
     parser.add_argument("--n_proc", "-n", type=int, default=16)
     args = parser.parse_args()
     main()
