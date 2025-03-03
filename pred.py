@@ -17,7 +17,7 @@ URL = "http://localhost:11434/v1/"
 API_KEY = "ollama"
 
 # Map model names to format used by inference LLM (Ollama here)
-ollama_model_map = {
+inference_server_model_map = {
     "Qwen2.5-7B-Instruct": "qwen2.5:7b-instruct",
     # Add other model mappings as needed
 }
@@ -44,8 +44,8 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
     tries = 0
     
     # Map model name to Ollama format if it exists
-    if model in ollama_model_map:
-        model = ollama_model_map[model]
+    if model in inference_server_model_map:
+        model = inference_server_model_map[model]
     elif model in model_map:
         model = model_map[model]
         
