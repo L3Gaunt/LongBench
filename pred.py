@@ -9,16 +9,21 @@ from transformers import AutoTokenizer
 import tiktoken
 import torch.multiprocessing as mp
 from multiprocessing import Queue
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 model_map = json.loads(open('config/model2path.json', encoding='utf-8').read())
 maxlen_map = json.loads(open('config/model2maxlen.json', encoding='utf-8').read())
 
-URL = "http://localhost:11434/v1/"
-API_KEY = "ollama"
+URL = "https://openrouter.ai/api/v1"
+API_KEY = os.getenv("OPENROUTER_KEY")
 
-# Map model names to format used by inference LLM (Ollama here)
+# Map model names to format used by OpenRouter
 inference_server_model_map = {
-    "Qwen2.5-7B-Instruct": "qwen2.5:7b-instruct",
+    "Qwen2.5-7B-Instruct": "qwen/qwen2.5-7b-instruct",
+    "Llama-3.1-8B-Instruct": "meta-llama/llama-3.1-8b-instruct:free",
     # Add other model mappings as needed
 }
 
@@ -43,7 +48,7 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
             prompt = tokenizer.decode(input_ids)
     tries = 0
     
-    # Map model name to Ollama format if it exists
+    # Map model name to OpenRouter format if it exists
     if model in inference_server_model_map:
         model = inference_server_model_map[model]
     elif model in model_map:
@@ -57,6 +62,10 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
                 max_tokens=max_new_tokens,
+                headers={
+                    "HTTP-Referer": "https://github.com/THUDM/LongBench",  # Required for OpenRouter
+                    "X-Title": "LongBench"  # Optional, but good practice
+                }
             )
             return completion.choices[0].message.content
         except KeyboardInterrupt as e:
