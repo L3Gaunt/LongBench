@@ -12,8 +12,8 @@ import torch.multiprocessing as mp
 model_map = json.loads(open('config/model2path.json', encoding='utf-8').read())
 maxlen_map = json.loads(open('config/model2maxlen.json', encoding='utf-8').read())
 
-URL = "http://127.0.0.1:8000/v1"
-API_KEY = "token-abc123"
+URL = "http://localhost:11434/v1/"
+API_KEY = "ollama"
 template_rag = open('prompts/0shot_rag.txt', encoding='utf-8').read()
 template_no_context = open('prompts/0shot_no_context.txt', encoding='utf-8').read()
 template_0shot = open('prompts/0shot.txt', encoding='utf-8').read()
