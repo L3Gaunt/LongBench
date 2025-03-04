@@ -268,6 +268,6 @@ if __name__ == "__main__":
     parser.add_argument("--rag", "-rag", type=int, default=0)
     parser.add_argument("--n_proc", "-n", type=int, default=16)
     parser.add_argument("--interjection_frequency", "-if", type=int, default=0, 
-                        help="Frequency (in tokens) at which to interject the interjections prompt. 0 means no interjections.")
+                        help="Inverse frequency (in tokens per interjection) at which to interject the interjections prompt. 0 means no interjections.")
     args = parser.parse_args()
     main()
