@@ -24,7 +24,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 # Map model names to format used by OpenRouter
 inference_server_model_map = {
     "Qwen2.5-7B-Instruct": "qwen/qwen2.5-7b-instruct",
-    "Llama-3.1-8B-Instruct": "meta-llama/llama-3.1-8b-instruct:free",
+    "Llama-3.1-8B-Instruct": "meta-llama/llama-3.1-8b-instruct",
     # Add other model mappings as needed
 }
 
