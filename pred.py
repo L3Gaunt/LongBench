@@ -77,19 +77,19 @@ def interject_document(document, interjection, tokenizer, frequency):
 def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_tokens=128, stop=None):
     # truncate
     truncated = False
-    max_len = maxlen_map[model]
-    if model in model_map:
-        input_ids = tokenizer.encode(prompt)
-        if len(input_ids) > max_len:
-            input_ids = input_ids[:max_len//2] + input_ids[-max_len//2:]
-            prompt = tokenizer.decode(input_ids, skip_special_tokens=True)
-            truncated = True
-    else:
-        input_ids = tokenizer.encode(prompt, disallowed_special=())
-        if len(input_ids) > max_len:
-            input_ids = input_ids[:max_len//2] + input_ids[-max_len//2:]
-            prompt = tokenizer.decode(input_ids)
-            truncated = True
+    # max_len = maxlen_map[model]
+    # if model in model_map:
+    #     input_ids = tokenizer.encode(prompt)
+    #     if len(input_ids) > max_len:
+    #         input_ids = input_ids[:max_len//2] + input_ids[-max_len//2:]
+    #         prompt = tokenizer.decode(input_ids, skip_special_tokens=True)
+    #         truncated = True
+    # else:
+    #     input_ids = tokenizer.encode(prompt, disallowed_special=())
+    #     if len(input_ids) > max_len:
+    #         input_ids = input_ids[:max_len//2] + input_ids[-max_len//2:]
+    #         prompt = tokenizer.decode(input_ids)
+    #         truncated = True
     tries = 0
     
     # Remap model name to format needed by inference server if specified
