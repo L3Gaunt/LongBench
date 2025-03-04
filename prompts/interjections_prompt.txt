@@ -8,10 +8,6 @@ Choices:
 (C) $C_C$
 (D) $C_D$
 Did you learn something about how to answer this question? It could be one word.
-
-
-
-
 Now, we'll continue.
 </inner_monologue>
 <text>
