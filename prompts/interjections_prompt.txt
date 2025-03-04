@@ -1,0 +1,17 @@
+</text>
+<inner_monologue>
+Recall that you were to answer the following question:
+$Q$, with
+Choices:
+(A) $C_A$
+(B) $C_B$
+(C) $C_C$
+(D) $C_D$
+Did you learn something about how to answer this question? It could be one word.
+
+
+
+
+Now, we'll continue.
+</inner_monologue>
+<text>
