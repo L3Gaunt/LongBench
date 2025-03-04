@@ -102,7 +102,7 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
             messages = [{"role": "user", "content": prompt}]
             completion = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 temperature=temperature,
                 max_tokens=max_new_tokens,
             )
