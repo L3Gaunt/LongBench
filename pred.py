@@ -21,13 +21,6 @@ URL = "https://openrouter.ai/api/v1"
 API_KEY = os.getenv("OPENROUTER_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-# Map model names to format used by OpenRouter
-inference_server_model_map = {
-    "Qwen2.5-7B-Instruct": "qwen/qwen2.5-7b-instruct",
-    "Llama-3.1-8B-Instruct": "meta-llama/llama-3.1-8b-instruct",
-    # Add other model mappings as needed
-}
-
 template_rag = open('prompts/0shot_rag.txt', encoding='utf-8').read()
 template_no_context = open('prompts/0shot_no_context.txt', encoding='utf-8').read()
 template_0shot = open('prompts/0shot.txt', encoding='utf-8').read()
@@ -99,10 +92,8 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
             truncated = True
     tries = 0
     
-    # Map model name to OpenRouter format if it exists
-    if model in inference_server_model_map:
-        model = inference_server_model_map[model]
-    elif model in model_map:
+    # Remap model name to format needed by inference server if specified
+    if model in model_map:
         model = model_map[model]
         
     while tries < 5:
@@ -114,6 +105,7 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
                 temperature=temperature,
                 max_tokens=max_new_tokens,
             )
+            print(*completion)
             return completion.choices[0].message.content, truncated
         except KeyboardInterrupt as e:
             raise e
@@ -141,7 +133,7 @@ def get_pred(data, args, result_queue):
     if "gpt" in model or "o1" in model:
         tokenizer = tiktoken.encoding_for_model("gpt-4o-2024-08-06")
     else:
-        tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer = AutoTokenizer .from_pretrained(
             model_map[model], 
             trust_remote_code=True,
             token=HF_TOKEN
