@@ -99,19 +99,22 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
     while tries < 1: # only 1 try for now
         tries += 1
         try:
+            messages = [{"role": "user", "content": prompt}]
             completion = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
                 max_tokens=max_new_tokens,
             )
+            choice = completion.choices[0].message.content
+            print(*messages)
             print(*completion)
-            return completion.choices[0].message.content, truncated
+            return choice, truncated
         except KeyboardInterrupt as e:
             raise e
         except Exception as e:
             print("Error Occurs: \"%s\"        Retry ..."%(str(e)))
-            time.sleep(1)
+            #time.sleep(1) # don't sleep because we don't retry
     else:
         print("Max tries. Failed.")
         return '', truncated
