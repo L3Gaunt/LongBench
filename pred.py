@@ -198,9 +198,6 @@ def get_pred(data, args, result_queue):
         item['pred'] = extract_answer(response)
         item['judge'] = item['pred'] == item['answer']
         item['context'] = context[:1000]
-        # Add interjection information to the result
-        if args.interjection_frequency > 0:
-            item['interjection_frequency'] = args.interjection_frequency
         result_queue.put(item)
 
 def main():
