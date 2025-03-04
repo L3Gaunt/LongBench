@@ -96,7 +96,7 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
     if model in model_map:
         model = model_map[model]
         
-    while tries < 5:
+    while tries < 1: # only 1 try for now
         tries += 1
         try:
             completion = client.chat.completions.create(
