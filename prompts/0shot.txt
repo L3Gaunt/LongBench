@@ -1,4 +1,11 @@
-Please read the following text and answer the question below.
+Please read the following text to find the answer to the following question: $Q$
+Choices:
+(A) $C_A$
+(B) $C_B$
+(C) $C_C$
+(D) $C_D$
+
+The text follows:
 
 <text>
 $DOC$
