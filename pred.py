@@ -19,6 +19,7 @@ maxlen_map = json.loads(open('config/model2maxlen.json', encoding='utf-8').read(
 
 URL = "https://openrouter.ai/api/v1"
 API_KEY = os.getenv("OPENROUTER_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 # Map model names to format used by OpenRouter
 inference_server_model_map = {
@@ -62,10 +63,6 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
                 max_tokens=max_new_tokens,
-                headers={
-                    "HTTP-Referer": "https://github.com/THUDM/LongBench",  # Required for OpenRouter
-                    "X-Title": "LongBench"  # Optional, but good practice
-                }
             )
             return completion.choices[0].message.content
         except KeyboardInterrupt as e:
@@ -94,7 +91,11 @@ def get_pred(data, args, result_queue):
     if "gpt" in model or "o1" in model:
         tokenizer = tiktoken.encoding_for_model("gpt-4o-2024-08-06")
     else:
-        tokenizer = AutoTokenizer.from_pretrained(model_map[model], trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_map[model], 
+            trust_remote_code=True,
+            token=HF_TOKEN
+        )
     client = OpenAI(
         base_url=URL,
         api_key=API_KEY
