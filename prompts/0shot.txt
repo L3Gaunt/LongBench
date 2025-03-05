@@ -1,4 +1,4 @@
-You will soon read a text in order to answer the following question: $Q$
+You will soon read a text in chunks in order to answer the following question: $Q$
 The choices:
 (A) $C_A$
 (B) $C_B$

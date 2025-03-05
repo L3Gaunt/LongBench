@@ -38,20 +38,22 @@ def process_interjections_prompt(question, choice_A, choice_B, choice_C, choice_
                                        .replace('$C_C$', choice_C.strip())\
                                        .replace('$C_D$', choice_D.strip())
 
-def interject_document(document, interjection, frequency):
+def interject_document(document, interjection, frequency, model=None, client=None):
     """
     Interject the document with the interjection at specified word frequency.
-    Creates alternating user/system messages.
+    Creates alternating user/system messages with real model completions.
     
     Args:
         document (str): The document to interject
         interjection (str): The interjection to insert
         frequency (int): The frequency (in words) at which to interject
+        model (str): The model to use for generating completions
+        client: The OpenAI client instance
         
     Returns:
         list: List of message dictionaries alternating between user and system roles
     """
-    if frequency <= 0:
+    if frequency <= 0 or not model or not client:
         return [{"role": "user", "content": document}]
         
     # Split into words
@@ -68,12 +70,17 @@ def interject_document(document, interjection, frequency):
     messages = []
     for i, chunk in enumerate(chunks):
         chunk_text = ' '.join(chunk)
-        messages.append({"role": "user", "content": chunk_text})
+        if i > 0:
+            chunk_text = '<text>' + chunk_text
+        
+        messages.append({"role": "user", "content": chunk_text + "</text>" + interjection})
         if i < len(chunks) - 1:  # Don't add interjection after the last chunk
-            messages.append({"role": "assistant", "content": "Okay, I read this part of the document."})
-            messages.append({"role": "user", "content": interjection})
-            messages.append({"role": "assistant", "content": "Alright, I thought about it. Let's continue."})
-    
+            # Get real completion for reading acknowledgment
+            current_messages = messages.copy()
+#            current_messages.append({"role": "user", "content": "Please acknowledge that you've read this part of the document and are ready to continue. Keep your response brief."})
+            read_response = query_llm(current_messages, model, client, temperature=0.1, max_new_tokens=128)
+            messages.append({"role": "assistant", "content": read_response})
+                
     return messages
 
 def query_llm(prompt, model, client=None, temperature=0.5, max_new_tokens=128, stop=None):
@@ -233,7 +240,7 @@ def get_pred(data, args, result_queue):
             
         # Apply interjections to the context if interjection_frequency > 0
         if args.interjection_frequency > 0:
-            messages = interject_document(context, processed_interjection, args.interjection_frequency)
+            messages = interject_document(context, processed_interjection, args.interjection_frequency, model, client)
             # Replace the context with the final message content
             context = ' '.join(msg["content"] for msg in messages)
             

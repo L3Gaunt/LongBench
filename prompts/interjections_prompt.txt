@@ -1,3 +1,4 @@
+</text>
 Recall that you were to answer the following question:
 $Q$, with
 Choices:
@@ -5,4 +6,4 @@ Choices:
 (B) $C_B$
 (C) $C_C$
 (D) $C_D$
-Think for a bit about whether you learned anything about the correct answer.
+Think for a bit about whether you learned anything relevant for finding the answer.
