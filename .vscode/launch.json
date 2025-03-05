@@ -12,7 +12,8 @@
         },
         "args": [
           "--model", "Llama-3.1-8B-Instruct",
-          "--n_proc", "1"
+          "--n_proc", "1",
+          "--interjection_frequency", "2000"
         ]
       }
     ]
