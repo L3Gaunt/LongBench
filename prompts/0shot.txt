@@ -1,5 +1,5 @@
-Please read the following text to find the answer to the following question: $Q$
-Choices:
+You will soon read a text in order to answer the following question: $Q$
+The choices:
 (A) $C_A$
 (B) $C_B$
 (C) $C_C$
@@ -11,11 +11,4 @@ The text follows:
 $DOC$
 </text>
 
-What is the correct answer to this question: $Q$
-Choices:
-(A) $C_A$
-(B) $C_B$
-(C) $C_C$
-(D) $C_D$
-
-Format your response as follows: "The correct answer is (insert answer here)".
+Now, please answer the question. Format your response as follows: "The correct answer is (insert answer here)".
