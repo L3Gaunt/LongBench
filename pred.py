@@ -117,15 +117,89 @@ def extract_answer(response):
         else:
             return None
 
+def is_within_length_limit(text, model):
+    """
+    Check if the text length is within the model's token limit.
+    Uses character count as a proxy with a 4x buffer.
+    
+    Args:
+        text (str): The text to check
+        model (str): The model name
+        
+    Returns:
+        bool: True if the text is likely within limits, False otherwise
+    """
+    # Get the model's max token length, default to smallest if model not found
+    max_tokens = maxlen_map.get(model, min(maxlen_map.values()))
+    
+    # Use character count as a proxy for token count
+    # We use a 4x buffer as requested
+    char_limit = max_tokens * 4
+    
+    return len(text) <= char_limit
+
+class Statistics:
+    def __init__(self):
+        self.correct = 0
+        self.incorrect = 0
+        self.error = 0
+        self.skipped_length = 0
+        self.total = 0
+        
+    def print_summary(self):
+        print("\nProcessing Summary:")
+        print(f"Total items: {self.total}")
+        print(f"Correct: {self.correct} ({(self.correct/self.total*100):.2f}%)")
+        print(f"Incorrect: {self.incorrect} ({(self.incorrect/self.total*100):.2f}%)")
+        print(f"API Errors: {self.error} ({(self.error/self.total*100):.2f}%)")
+        print(f"Skipped (too long): {self.skipped_length} ({(self.skipped_length/self.total*100):.2f}%)")
+        print(f"Processed: {self.correct + self.incorrect} ({((self.correct + self.incorrect)/self.total*100):.2f}%)")
+        
+    def to_dict(self):
+        total = self.total or 1  # Avoid division by zero
+        return {
+            "total_items": self.total,
+            "correct": {
+                "count": self.correct,
+                "percentage": (self.correct/total*100)
+            },
+            "incorrect": {
+                "count": self.incorrect,
+                "percentage": (self.incorrect/total*100)
+            },
+            "api_errors": {
+                "count": self.error,
+                "percentage": (self.error/total*100)
+            },
+            "skipped_length": {
+                "count": self.skipped_length,
+                "percentage": (self.skipped_length/total*100)
+            },
+            "processed": {
+                "count": self.correct + self.incorrect,
+                "percentage": ((self.correct + self.incorrect)/total*100)
+            }
+        }
+
 def get_pred(data, args, result_queue):
     model = args.model
     client = OpenAI(
         base_url=URL,
         api_key=API_KEY
     )
+    
+    stats = Statistics()
+    stats.total = len(data)
+    
     for item in tqdm(data):
         context = item['context']
         
+        # Skip if context is too long
+        if not is_within_length_limit(context, model):
+            print(f"\nSkipped - Input too long: ID {item.get('_id', 'unknown')} ({len(context)} chars)")
+            stats.skipped_length += 1
+            continue
+            
         # Process the interjections prompt if interjection_frequency > 0
         processed_interjection = ""
         if args.interjection_frequency > 0:
@@ -143,6 +217,13 @@ def get_pred(data, args, result_queue):
             retrieved = item["retrieved_context"][:args.rag]
             retrieved = sorted(retrieved, key=lambda x: x['c_idx'])
             context = '\n\n'.join([f"Retrieved chunk {idx+1}: {x['content']}" for idx, x in enumerate(retrieved)])
+            
+            # Check combined context length after RAG
+            if not is_within_length_limit(context, model):
+                print(f"\nSkipped - RAG context too long: ID {item.get('_id', 'unknown')} ({len(context)} chars)")
+                stats.skipped_length += 1
+                continue
+                
         elif args.no_context:
             template = template_no_context
         elif args.cot:
@@ -158,27 +239,49 @@ def get_pred(data, args, result_queue):
             
         prompt = template.replace('$DOC$', context.strip()).replace('$Q$', item['question'].strip()).replace('$C_A$', item['choice_A'].strip()).replace('$C_B$', item['choice_B'].strip()).replace('$C_C$', item['choice_C'].strip()).replace('$C_D$', item['choice_D'].strip())
         
-        if args.interjection_frequency > 0:
-            # If we have interjections, add the final prompt as a user message
-            messages.append({"role": "user", "content": prompt})
-            output = query_llm(messages, model, client, temperature=0.1, max_new_tokens=1024 if args.cot else 128)
-        else:
-            output = query_llm(prompt, model, client, temperature=0.1, max_new_tokens=1024 if args.cot else 128)
-        if output == '':
-            continue
-        if args.cot: # extract answer
-            response = output.strip()
-            item['response_cot'] = response
-            prompt = template_0shot_cot_ans.replace('$DOC$', context.strip()).replace('$Q$', item['question'].strip()).replace('$C_A$', item['choice_A'].strip()).replace('$C_B$', item['choice_B'].strip()).replace('$C_C$', item['choice_C'].strip()).replace('$C_D$', item['choice_D'].strip()).replace('$COT$', response)
-            output = query_llm(prompt, model, client, temperature=0.1, max_new_tokens=128)
+        try:
+            if args.interjection_frequency > 0:
+                # If we have interjections, add the final prompt as a user message
+                messages.append({"role": "user", "content": prompt})
+                output = query_llm(messages, model, client, temperature=0.1, max_new_tokens=1024 if args.cot else 128)
+            else:
+                output = query_llm(prompt, model, client, temperature=0.1, max_new_tokens=1024 if args.cot else 128)
+                
             if output == '':
+                print(f"\nAPI Error: ID {item.get('_id', 'unknown')}")
+                stats.error += 1
                 continue
-        response = output.strip()
-        item['response'] = response
-        item['pred'] = extract_answer(response)
-        item['judge'] = item['pred'] == item['answer']
-        item['context'] = context[:1000]
-        result_queue.put(item)
+                
+            if args.cot: # extract answer
+                response = output.strip()
+                item['response_cot'] = response
+                prompt = template_0shot_cot_ans.replace('$DOC$', context.strip()).replace('$Q$', item['question'].strip()).replace('$C_A$', item['choice_A'].strip()).replace('$C_B$', item['choice_B'].strip()).replace('$C_C$', item['choice_C'].strip()).replace('$C_D$', item['choice_D'].strip()).replace('$COT$', response)
+                output = query_llm(prompt, model, client, temperature=0.1, max_new_tokens=128)
+                if output == '':
+                    print(f"\nAPI Error (COT): ID {item.get('_id', 'unknown')}")
+                    stats.error += 1
+                    continue
+                    
+            response = output.strip()
+            item['response'] = response
+            item['pred'] = extract_answer(response)
+            item['judge'] = item['pred'] == item['answer']
+            
+            if item['judge']:
+                stats.correct += 1
+            else:
+                stats.incorrect += 1
+                
+            item['context'] = context[:1000]
+            result_queue.put(item)
+            
+        except Exception as e:
+            print(f"\nUnexpected Error: ID {item.get('_id', 'unknown')} - {str(e)}")
+            stats.error += 1
+            continue
+    
+    # Send statistics through queue for the main process
+    result_queue.put({"statistics": stats})
 
 def main():
     os.makedirs(args.save_dir, exist_ok=True)
@@ -196,9 +299,10 @@ def main():
     
     # Add interjection frequency to filename if applicable
     if args.interjection_frequency > 0:
-        out_file = os.path.join(args.save_dir, base_filename + f"_if_{str(args.interjection_frequency)}.jsonl")
-    else:
-        out_file = os.path.join(args.save_dir, base_filename + ".jsonl")
+        base_filename += f"_if_{str(args.interjection_frequency)}"
+    
+    out_file = os.path.join(args.save_dir, base_filename + ".jsonl")
+    summary_file = os.path.join(args.save_dir, base_filename + "_summary.json")
 
     dataset = load_dataset('THUDM/LongBench-v2', split='train')
     data_all = [{"_id": item["_id"], "domain": item["domain"], "sub_domain": item["sub_domain"], "difficulty": item["difficulty"], "length": item["length"], "question": item["question"], "choice_A": item["choice_A"], "choice_B": item["choice_B"], "choice_C": item["choice_C"], "choice_D": item["choice_D"], "answer": item["answer"], "context": item["context"]} for item in dataset]
@@ -225,19 +329,49 @@ def main():
         p.start()
         processes.append(p)
 
+    # Collect statistics from all processes
+    all_stats = []
+    
     # Write results to file
     with open(out_file, 'a', encoding='utf-8') as fout:
-        while any(p.is_alive() for p in processes):
+        while any(p.is_alive() for p in processes) or not result_queue.empty():
             try:
                 item = result_queue.get(timeout=1)
-                fout.write(json.dumps(item, ensure_ascii=False) + '\n')
-                fout.flush()
+                if "statistics" in item:
+                    all_stats.append(item["statistics"])
+                else:
+                    fout.write(json.dumps(item, ensure_ascii=False) + '\n')
+                    fout.flush()
             except:
                 continue
 
     # Wait for all processes to complete
     for p in processes:
         p.join()
+        
+    # Combine statistics from all processes and save summary
+    if all_stats:
+        combined_stats = Statistics()
+        for stats in all_stats:
+            combined_stats.total += stats.total
+            combined_stats.correct += stats.correct
+            combined_stats.incorrect += stats.incorrect
+            combined_stats.error += stats.error
+            combined_stats.skipped_length += stats.skipped_length
+        
+        # Print final summary
+        print("\nFinal Statistics Across All Processes:")
+        combined_stats.print_summary()
+        
+        # Save parameters and statistics to summary file
+        summary = {
+            "parameters": vars(args),
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "statistics": combined_stats.to_dict()
+        }
+        
+        with open(summary_file, 'w', encoding='utf-8') as f:
+            json.dump(summary, f, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
