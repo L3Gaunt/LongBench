@@ -75,21 +75,6 @@ def interject_document(document, interjection, tokenizer, frequency):
     return result
 
 def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_tokens=128, stop=None):
-    # truncate
-    truncated = False
-    # max_len = maxlen_map[model]
-    # if model in model_map:
-    #     input_ids = tokenizer.encode(prompt)
-    #     if len(input_ids) > max_len:
-    #         input_ids = input_ids[:max_len//2] + input_ids[-max_len//2:]
-    #         prompt = tokenizer.decode(input_ids, skip_special_tokens=True)
-    #         truncated = True
-    # else:
-    #     input_ids = tokenizer.encode(prompt, disallowed_special=())
-    #     if len(input_ids) > max_len:
-    #         input_ids = input_ids[:max_len//2] + input_ids[-max_len//2:]
-    #         prompt = tokenizer.decode(input_ids)
-    #         truncated = True
     tries = 0
     
     # Remap model name to format needed by inference server if specified
@@ -109,7 +94,7 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
             choice = completion.choices[0].message.content
             print(*messages)
             print(*completion)
-            return choice, truncated
+            return choice
         except KeyboardInterrupt as e:
             raise e
         except Exception as e:
@@ -117,7 +102,7 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
             #time.sleep(1) # don't sleep because we don't retry
     else:
         print("Max tries. Failed.")
-        return '', truncated
+        return ''
 
 def extract_answer(response):
     response = response.replace('*', '')
@@ -179,25 +164,23 @@ def get_pred(data, args, result_queue):
         prompt = template.replace('$DOC$', context.strip()).replace('$Q$', item['question'].strip()).replace('$C_A$', item['choice_A'].strip()).replace('$C_B$', item['choice_B'].strip()).replace('$C_C$', item['choice_C'].strip()).replace('$C_D$', item['choice_D'].strip())
         
         if args.cot:
-            output, truncated_first = query_llm(prompt, model, tokenizer, client, temperature=0.1, max_new_tokens=1024)
+            output = query_llm(prompt, model, tokenizer, client, temperature=0.1, max_new_tokens=1024)
         else:
-            output, truncated = query_llm(prompt, model, tokenizer, client, temperature=0.1, max_new_tokens=128)
+            output = query_llm(prompt, model, tokenizer, client, temperature=0.1, max_new_tokens=128)
         if output == '':
             continue
         if args.cot: # extract answer
             response = output.strip()
             item['response_cot'] = response
             prompt = template_0shot_cot_ans.replace('$DOC$', context.strip()).replace('$Q$', item['question'].strip()).replace('$C_A$', item['choice_A'].strip()).replace('$C_B$', item['choice_B'].strip()).replace('$C_C$', item['choice_C'].strip()).replace('$C_D$', item['choice_D'].strip()).replace('$COT$', response)
-            output, truncated_second = query_llm(prompt, model, tokenizer, client, temperature=0.1, max_new_tokens=128)
+            output = query_llm(prompt, model, tokenizer, client, temperature=0.1, max_new_tokens=128)
             if output == '':
                 continue
-            truncated = truncated_first or truncated_second  # Either prompt was truncated
         response = output.strip()
         item['response'] = response
         item['pred'] = extract_answer(response)
         item['judge'] = item['pred'] == item['answer']
         item['context'] = context[:1000]
-        item['truncated'] = truncated
         result_queue.put(item)
 
 def main():
