@@ -38,43 +38,45 @@ def process_interjections_prompt(question, choice_A, choice_B, choice_C, choice_
                                        .replace('$C_C$', choice_C.strip())\
                                        .replace('$C_D$', choice_D.strip())
 
-def interject_document(document, interjection, tokenizer, frequency):
+def interject_document(document, interjection, frequency):
     """
-    Interject the document with the interjection at specified token frequency.
+    Interject the document with the interjection at specified word frequency.
+    Creates alternating user/system messages.
     
     Args:
         document (str): The document to interject
         interjection (str): The interjection to insert
-        tokenizer: The tokenizer to use for counting tokens
-        frequency (int): The frequency (in tokens) at which to interject
+        frequency (int): The frequency (in words) at which to interject
         
     Returns:
-        str: The document with interjections
+        list: List of message dictionaries alternating between user and system roles
     """
     if frequency <= 0:
-        return document
+        return [{"role": "user", "content": document}]
         
-    # Tokenize the document
-    tokens = tokenizer.encode(document)
+    # Split into words
+    words = document.split()
     
     # If document is shorter than frequency, return as is
-    if len(tokens) <= frequency:
-        return document
+    if len(words) <= frequency:
+        return [{"role": "user", "content": document}]
     
-    # Split the tokens at frequency intervals
-    chunks = [tokens[i:i+frequency] for i in range(0, len(tokens), frequency)]
+    # Split the words at frequency intervals
+    chunks = [words[i:i+frequency] for i in range(0, len(words), frequency)]
     
-    # Decode each chunk and join with the interjection
-    result = ""
+    # Create alternating messages
+    messages = []
     for i, chunk in enumerate(chunks):
-        chunk_text = tokenizer.decode(chunk)
-        result += chunk_text
+        chunk_text = ' '.join(chunk)
+        messages.append({"role": "user", "content": chunk_text})
         if i < len(chunks) - 1:  # Don't add interjection after the last chunk
-            result += interjection
+            messages.append({"role": "assistant", "content": "Okay, I read this part of the document."})
+            messages.append({"role": "user", "content": interjection})
+            messages.append({"role": "assistant", "content": "Alright, I thought about it. Let's continue."})
     
-    return result
+    return messages
 
-def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_tokens=128, stop=None):
+def query_llm(prompt, model, client=None, temperature=0.5, max_new_tokens=128, stop=None):
     tries = 0
     
     # Remap model name to format needed by inference server if specified
@@ -84,7 +86,9 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
     while tries < 1: # only 1 try for now
         tries += 1
         try:
-            messages = [{"role": "user", "content": prompt}]
+            # If prompt is already a list of messages, use it directly
+            messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
+            
             completion = client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -99,10 +103,7 @@ def query_llm(prompt, model, tokenizer, client=None, temperature=0.5, max_new_to
             raise e
         except Exception as e:
             print("Error Occurs: \"%s\"        Retry ..."%(str(e)))
-            #time.sleep(1) # don't sleep because we don't retry
-    else:
-        print("Max tries. Failed.")
-        return ''
+            return ''
 
 def extract_answer(response):
     response = response.replace('*', '')
@@ -118,14 +119,6 @@ def extract_answer(response):
 
 def get_pred(data, args, result_queue):
     model = args.model
-    if "gpt" in model or "o1" in model:
-        tokenizer = tiktoken.encoding_for_model("gpt-4o-2024-08-06")
-    else:
-        tokenizer = AutoTokenizer .from_pretrained(
-            model_map[model], 
-            trust_remote_code=True,
-            token=HF_TOKEN
-        )
     client = OpenAI(
         base_url=URL,
         api_key=API_KEY
@@ -159,21 +152,25 @@ def get_pred(data, args, result_queue):
             
         # Apply interjections to the context if interjection_frequency > 0
         if args.interjection_frequency > 0:
-            context = interject_document(context, processed_interjection, tokenizer, args.interjection_frequency)
+            messages = interject_document(context, processed_interjection, args.interjection_frequency)
+            # Replace the context with the final message content
+            context = ' '.join(msg["content"] for msg in messages)
             
         prompt = template.replace('$DOC$', context.strip()).replace('$Q$', item['question'].strip()).replace('$C_A$', item['choice_A'].strip()).replace('$C_B$', item['choice_B'].strip()).replace('$C_C$', item['choice_C'].strip()).replace('$C_D$', item['choice_D'].strip())
         
-        if args.cot:
-            output = query_llm(prompt, model, tokenizer, client, temperature=0.1, max_new_tokens=1024)
+        if args.interjection_frequency > 0:
+            # If we have interjections, add the final prompt as a user message
+            messages.append({"role": "user", "content": prompt})
+            output = query_llm(messages, model, client, temperature=0.1, max_new_tokens=1024 if args.cot else 128)
         else:
-            output = query_llm(prompt, model, tokenizer, client, temperature=0.1, max_new_tokens=128)
+            output = query_llm(prompt, model, client, temperature=0.1, max_new_tokens=1024 if args.cot else 128)
         if output == '':
             continue
         if args.cot: # extract answer
             response = output.strip()
             item['response_cot'] = response
             prompt = template_0shot_cot_ans.replace('$DOC$', context.strip()).replace('$Q$', item['question'].strip()).replace('$C_A$', item['choice_A'].strip()).replace('$C_B$', item['choice_B'].strip()).replace('$C_C$', item['choice_C'].strip()).replace('$C_D$', item['choice_D'].strip()).replace('$COT$', response)
-            output = query_llm(prompt, model, tokenizer, client, temperature=0.1, max_new_tokens=128)
+            output = query_llm(prompt, model, client, temperature=0.1, max_new_tokens=128)
             if output == '':
                 continue
         response = output.strip()
@@ -251,6 +248,6 @@ if __name__ == "__main__":
     parser.add_argument("--rag", "-rag", type=int, default=0)
     parser.add_argument("--n_proc", "-n", type=int, default=16)
     parser.add_argument("--interjection_frequency", "-if", type=int, default=0, 
-                        help="Frequency (in tokens) at which to interject the interjections prompt. 0 means no interjections.")
+                        help="Frequency (inverse - words per interjection) at which to interject the interjections prompt. 0 means no interjections.")
     args = parser.parse_args()
     main()
