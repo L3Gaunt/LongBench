@@ -1,0 +1,35 @@
+{
+  "parameters": {
+    "save_dir": "results",
+    "model": "Llama-3.1-8B-Instruct",
+    "cot": false,
+    "no_context": false,
+    "rag": 0,
+    "n_proc": 1,
+    "interjection_frequency": 1000
+  },
+  "timestamp": "2025-03-04 21:06:43",
+  "statistics": {
+    "total_items": 503,
+    "correct": {
+      "count": 41,
+      "percentage": 8.151093439363818
+    },
+    "incorrect": {
+      "count": 135,
+      "percentage": 26.838966202783297
+    },
+    "api_errors": {
+      "count": 113,
+      "percentage": 22.46520874751491
+    },
+    "skipped_length": {
+      "count": 214,
+      "percentage": 42.54473161033797
+    },
+    "processed": {
+      "count": 176,
+      "percentage": 34.990059642147116
+    }
+  }
+}
