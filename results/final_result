@@ -1,3 +1,0 @@
-TOKENIZERS_PARALLELISM=false python3 pred.py --model "Llama-3.1-8B-Instruct" --n_proc 1 2>&1 | tee output.log)
-77 answers correct, 207 answers incorrect
-219 API errors (including where we had too many tokens)
